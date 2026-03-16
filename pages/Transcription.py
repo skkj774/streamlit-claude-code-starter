@@ -142,57 +142,78 @@ if "summary" in st.session_state:
     st.divider()
     st.header("Step 2: 病態把握 & 栄養改善案")
 
+    # 文字起こしから抽出ボタン
+    if st.button("文字起こしから検査値・基本情報を抽出（Claude）", use_container_width=True):
+        client = get_claude_client()
+        with st.spinner("文字起こしから情報を抽出しています..."):
+            response = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1024,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"""以下の文字起こしテキストから、検査値と患者基本情報をそれぞれ抽出してください。
+言及されていない項目は省略してください。
+
+【文字起こしテキスト】
+{st.session_state["transcript"]}
+
+【出力形式】（この形式を厳守してください）
+
+---検査値---
+（検査値や測定値があれば「項目名: 値 単位」形式で1行ずつ。例: HbA1c: 7.2%）
+（言及なければ「記載なし」と出力）
+
+---患者基本情報---
+（年齢、性別、身長、体重、既往歴、服薬情報など言及されたものを1行ずつ。例: 年齢: 52歳）
+（言及なければ「記載なし」と出力）
+""",
+                    }
+                ],
+            )
+            raw = response.content[0].text
+            # 検査値と基本情報をパース
+            lab_part = ""
+            info_part = ""
+            if "---検査値---" in raw and "---患者基本情報---" in raw:
+                lab_part = raw.split("---検査値---")[1].split("---患者基本情報---")[0].strip()
+                info_part = raw.split("---患者基本情報---")[1].strip()
+            else:
+                lab_part = raw
+            st.session_state["extracted_lab"] = lab_part
+            st.session_state["extracted_info"] = info_part
+
     col_left, col_right = st.columns([1, 1])
 
     with col_left:
-        st.subheader("検査値入力")
-        st.caption("検査値を自由形式で入力してください（例: HbA1c 7.2%, LDL 145 mg/dL）")
+        st.subheader("検査値")
+        st.caption("文字起こしから自動抽出されます。手動入力・編集も可能です。")
         lab_values = st.text_area(
-            label="検査値",
-            placeholder="""例:
-HbA1c: 7.2%
-空腹時血糖: 135 mg/dL
-LDL: 145 mg/dL
-HDL: 42 mg/dL
-中性脂肪: 210 mg/dL
-AST: 38 U/L
-ALT: 52 U/L
-尿酸: 7.8 mg/dL
-eGFR: 68 mL/min
-血圧: 138/88 mmHg
-BMI: 27.3""",
+            label="検査値（編集可能）",
+            value=st.session_state.get("extracted_lab", ""),
+            placeholder="例:\nHbA1c: 7.2%\nLDL: 145 mg/dL\n血圧: 138/88 mmHg",
             height=280,
             key="lab_values_input",
         )
+        st.session_state["extracted_lab"] = lab_values
 
     with col_right:
-        st.subheader("患者基本情報（任意）")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            patient_age = st.number_input("年齢", min_value=0, max_value=120, value=0, step=1)
-            patient_gender = st.selectbox("性別", ["未入力", "男性", "女性"])
-        with col_b:
-            patient_height = st.number_input("身長 (cm)", min_value=0.0, max_value=250.0, value=0.0, step=0.1)
-            patient_weight = st.number_input("体重 (kg)", min_value=0.0, max_value=300.0, value=0.0, step=0.1)
-        patient_disease = st.text_input("既往歴・疾患名", placeholder="例: 2型糖尿病、高血圧")
+        st.subheader("患者基本情報")
+        st.caption("文字起こしから自動抽出されます。手動入力・編集も可能です。")
+        patient_info = st.text_area(
+            label="患者基本情報（編集可能）",
+            value=st.session_state.get("extracted_info", ""),
+            placeholder="例:\n年齢: 52歳\n性別: 男性\n身長: 168cm\n体重: 75kg\n既往歴: 2型糖尿病",
+            height=280,
+            key="patient_info_input",
+        )
+        st.session_state["extracted_info"] = patient_info
 
     if st.button("病態把握・改善案を生成（Claude）", type="primary", use_container_width=True):
-        if not lab_values.strip():
+        if not lab_values.strip() or lab_values.strip() == "記載なし":
             st.warning("検査値を入力してください。")
         else:
             client = get_claude_client()
-            basic_info = ""
-            if patient_age > 0:
-                basic_info += f"年齢: {patient_age}歳、"
-            if patient_gender != "未入力":
-                basic_info += f"性別: {patient_gender}、"
-            if patient_height > 0:
-                basic_info += f"身長: {patient_height}cm、"
-            if patient_weight > 0:
-                basic_info += f"体重: {patient_weight}kg、"
-            if patient_disease:
-                basic_info += f"既往歴: {patient_disease}"
-
             with st.spinner("病態を分析しています..."):
                 response = client.messages.create(
                     model="claude-sonnet-4-6",
@@ -204,7 +225,7 @@ BMI: 27.3""",
 以下の情報をもとに、①病態の把握、②患者の生活習慣の評価、③検査値・栄養素レベルでの改善案を提示してください。
 
 【患者基本情報】
-{basic_info if basic_info else "未入力"}
+{patient_info if patient_info.strip() else "未入力"}
 
 【検査値】
 {lab_values}
