@@ -1,5 +1,5 @@
 import streamlit as st
-import whisper
+from faster_whisper import WhisperModel
 import tempfile
 import os
 import anthropic
@@ -11,12 +11,6 @@ st.caption("音声文字起こし → 要点まとめ → 病態把握・改善�
 # ── サイドバー ──────────────────────────────────────────────
 with st.sidebar:
     st.header("設定")
-    api_key = st.text_input(
-        "Anthropic API キー",
-        type="password",
-        help="Claude APIキーを入力してください（sk-ant-...）",
-    )
-    st.divider()
     model_size = st.selectbox(
         "Whisper モデルサイズ",
         options=["tiny", "base", "small", "medium"],
@@ -37,11 +31,7 @@ with st.sidebar:
 
 
 def get_claude_client():
-    key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-    if not key:
-        st.error("サイドバーにAnthropicのAPIキーを入力してください。")
-        st.stop()
-    return anthropic.Anthropic(api_key=key)
+    return anthropic.Anthropic()
 
 
 # ── STEP 1: 文字起こし & 要点まとめ ────────────────────────
@@ -58,7 +48,7 @@ if uploaded_file is not None:
 
     if st.button("文字起こし開始", type="primary", use_container_width=True):
         with st.spinner(f"Whisperモデル ({model_size}) を読み込み中..."):
-            model = whisper.load_model(model_size)
+            model = WhisperModel(model_size, device="cpu", compute_type="int8")
 
         with st.spinner("文字起こし中..."):
             suffix = os.path.splitext(uploaded_file.name)[1] or ".mp3"
@@ -66,8 +56,8 @@ if uploaded_file is not None:
                 tmp.write(uploaded_file.read())
                 tmp_path = tmp.name
             try:
-                result = model.transcribe(tmp_path)
-                st.session_state["transcript"] = result["text"].strip()
+                segments, _ = model.transcribe(tmp_path)
+                st.session_state["transcript"] = "".join(s.text for s in segments).strip()
                 st.session_state["transcript_filename"] = uploaded_file.name
                 st.session_state.pop("summary", None)
                 st.session_state.pop("analysis", None)

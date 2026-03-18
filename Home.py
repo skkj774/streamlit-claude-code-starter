@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from dotenv import load_dotenv
+
+load_dotenv()
 
 st.set_page_config(page_title="Streamlit BI x Claude Code Starter", layout="wide")
 

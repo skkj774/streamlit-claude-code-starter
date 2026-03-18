@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 import streamlit as st
-import whisper
+from faster_whisper import WhisperModel
 
 st.set_page_config(page_title="リアルタイム会話文字起こし", layout="wide")
 st.title("リアルタイム会話文字起こし")
@@ -48,7 +48,7 @@ with st.sidebar:
 # ── Whisper モデルのキャッシュ ──────────────────────────────
 @st.cache_resource(show_spinner="Whisperモデルを読み込み中...")
 def load_whisper_model(size: str):
-    return whisper.load_model(size)
+    return WhisperModel(size, device="cpu", compute_type="int8")
 
 
 def transcribe_audio(audio_bytes: bytes, lang: str) -> str:
@@ -59,8 +59,8 @@ def transcribe_audio(audio_bytes: bytes, lang: str) -> str:
     try:
         model = load_whisper_model(model_size)
         kwargs = {} if lang == "auto" else {"language": lang}
-        result = model.transcribe(tmp_path, **kwargs)
-        return result["text"].strip()
+        segments, _ = model.transcribe(tmp_path, **kwargs)
+        return "".join(s.text for s in segments).strip()
     finally:
         os.unlink(tmp_path)
 

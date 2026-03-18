@@ -6,21 +6,6 @@ st.set_page_config(page_title="データ分析チャットボット", layout="wi
 st.title("データ分析チャットボット")
 st.caption("注文・ユーザー・商品データについて質問してください。")
 
-# サイドバーでAPIキーを設定
-with st.sidebar:
-    st.header("設定")
-    api_key = st.text_input(
-        "Anthropic API Key",
-        type="password",
-        placeholder="sk-ant-...",
-        value=st.session_state.get("anthropic_api_key", ""),
-        help="Anthropic ConsoleからAPIキーを取得してください。",
-    )
-    if api_key:
-        st.session_state["anthropic_api_key"] = api_key
-        st.success("APIキーが設定されました")
-    else:
-        st.warning("APIキーを入力してください")
 
 @st.cache_data
 def load_data():
@@ -92,17 +77,13 @@ for msg in st.session_state.messages:
 
 # ユーザー入力
 if prompt := st.chat_input("データについて質問してください（例：どのカテゴリの売上が一番高いですか？）"):
-    if not st.session_state.get("anthropic_api_key"):
-        st.error("サイドバーにAPIキーを入力してください。")
-        st.stop()
-
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
         with st.spinner("考え中..."):
-            client = anthropic.Anthropic(api_key=st.session_state["anthropic_api_key"])
+            client = anthropic.Anthropic()
             response = client.messages.create(
                 model="claude-opus-4-6",
                 max_tokens=1024,
